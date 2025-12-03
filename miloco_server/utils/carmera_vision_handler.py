@@ -136,6 +136,12 @@ class CameraVisionHandler:
     async def unregister_raw_stream(self, channel: int):
         await self.miot_camera_instance.unregister_raw_video_async(channel)
 
+    async def register_raw_audio_stream(self, callback: Callable[[str, bytes, int, int, int], Coroutine], channel: int):
+        await self.miot_camera_instance.register_raw_audio_async(callback, channel)
+
+    async def unregister_raw_audio_stream(self, channel: int):
+        await self.miot_camera_instance.unregister_raw_audio_async(channel)
+
     async def add_camera_img(self, did: str, data: bytes, ts: int, channel: int):
         logger.debug("add_camera_img camera_id: %s, camera timestamp: %d, image_size: %d", did, ts, len(data))
         self.camera_img_queues[channel].put(CameraImgInfo(data=data, timestamp=int(time.time())))

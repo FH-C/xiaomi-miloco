@@ -367,3 +367,133 @@ async def video_stream_websocket(
         if cid:
             await miot_video_stream_manager.close_connection(
                 user_name=current_user, token_hash=token_hash,camera_id=camera_id, channel=channel, cid=cid)
+
+
+class MIoTAudioStreamManager:
+    """MIoT Audio WS Manager."""
+    _CAMERA_CONNECT_COUNT_MAX: int = 4
+    # key=camera_id.channel, value={user_name: {user_tag: Dict[id, websocket]}}
+    _camera_connect_map: Dict[str, Dict[str, OrderedDict[str, WebSocket]]]
+    _camera_connect_id: int
+
+    def __init__(self):
+        self._camera_connect_map = {}
+        self._camera_connect_id = 0
+        logger.info("Init MIoT Audio WS Manager")
+
+    async def new_connection(
+        self, websocket: WebSocket, user_name: str, token_hash: str,  camera_id: str, channel: int
+    ) -> str:
+        """New audio stream connection."""
+        camera_tag = f"{camera_id}.{channel}"
+        if camera_tag not in self._camera_connect_map or not self._camera_connect_map[camera_tag]:
+            self._camera_connect_map[camera_tag] = {}
+            await manager.miot_service.start_audio_stream(
+                camera_id=camera_id, channel=channel, callback=self.__audio_stream_callback)
+            logger.info("Start audio stream, %s.%d", camera_id, channel)
+        user_tag = f"{user_name}.{token_hash}"
+        self._camera_connect_map[camera_tag].setdefault(user_tag, OrderedDict())
+        connection_id = str(self._camera_connect_id)
+        self._camera_connect_id += 1
+        self._camera_connect_map[camera_tag][user_tag][connection_id] = websocket
+        logger.info("New audio stream connection, %s, %s, %s", camera_tag, user_tag, connection_id)
+        if len(self._camera_connect_map[camera_tag][user_tag]) > self._CAMERA_CONNECT_COUNT_MAX:
+            # pylint: disable=unused-variable
+            logger.warning("Too many connections, %s.%d, %s, remove first connect",camera_id, channel, user_tag)
+            _, ws = self._camera_connect_map[camera_tag][user_tag].popitem(last=False)
+            try:
+                if ws.client_state == WebSocketState.CONNECTED:
+                    await ws.close()
+            except Exception as err:  # pylint: disable=broad-exception-caught
+                logger.error("WebSocket close error: %s", err)
+        return connection_id
+
+    async def close_connection(
+        self, user_name: str, token_hash: str, camera_id: str, channel: int, cid: str
+    ):
+        """Close audio stream connection."""
+        camera_tag = f"{camera_id}.{channel}"
+        user_tag = f"{user_name}.{token_hash}"
+        if (
+            camera_tag not in self._camera_connect_map
+            or user_tag not in self._camera_connect_map[camera_tag]
+            or cid not in self._camera_connect_map[camera_tag][user_tag]
+        ):
+            return
+        logger.info("Close audio stream connection, %s, %s, %s", camera_tag, user_tag, cid)
+
+        try:
+            ws = self._camera_connect_map[camera_tag][user_tag].pop(cid)
+            if ws.client_state == WebSocketState.CONNECTED:
+                await ws.close()
+        except Exception as err:  # pylint: disable=broad-exception-caught
+            logger.error("WebSocket close error: %s", err)
+        if len(self._camera_connect_map[camera_tag][user_tag]) == 0:
+            self._camera_connect_map[camera_tag].pop(user_tag, None)
+        if len(self._camera_connect_map[camera_tag]) == 0:
+            await manager.miot_service.stop_audio_stream(camera_id, channel)
+            self._camera_connect_map.pop(camera_tag)
+            logger.info("No connection, stop audio stream, %s.%d", camera_id, channel)
+
+    async def __audio_stream_callback(
+        self, did: str, data: bytes, ts: int, seq: int, channel: int
+    ) -> None:
+        """Audio stream callback."""
+        # pylint: disable=unused-argument
+        camera_tag = f"{did}.{channel}"
+        if camera_tag not in self._camera_connect_map:
+            logger.error("No connection, %s.%d", did, channel)
+            # Stop camera stream
+            await manager.miot_service.stop_audio_stream(did, channel)
+            return
+        for conn in self._camera_connect_map[camera_tag].values():
+            for ws in conn.values():
+                try:
+                    await ws.send_bytes(data)
+                except Exception as err:  # pylint: disable=broad-exception-caught
+                    logger.error("WebSocket send error: %s", err)
+
+
+miot_audio_stream_manager = MIoTAudioStreamManager()
+
+
+@router.websocket("/ws/audio_stream")
+async def audio_stream_websocket(
+    websocket: WebSocket,
+    camera_id: str,
+    channel: int,
+    current_user: str = Depends(verify_websocket_token)
+):
+    """Audio stream WebSocket."""
+    logger.info(
+        "WebSocket connection request, %s, %s.%d", current_user, camera_id, channel)
+    start_time: datetime = datetime.now()
+    token_hash: str = str(hash(websocket.cookies.get("access_token")))
+    cid: Optional[str] = None
+    try:
+        await websocket.accept()
+        cid = await miot_audio_stream_manager.new_connection(
+            websocket=websocket,
+            user_name=current_user,
+            token_hash=token_hash,
+            camera_id=camera_id,
+            channel=channel)
+        while True:
+            try:
+                message = await websocket.receive_text()
+                logger.info("Received message from client, %s", message)
+            except Exception as err:  # pylint: disable=broad-exception-caught
+                logger.error("WebSocket error: %s", err)
+                break
+    except WebSocketDisconnect:
+        logger.warning("Client disconnected, %s.%d", camera_id, channel)
+    except Exception as err:  # pylint: disable=broad-exception-caught
+        logger.error("WebSocket error, %s", err)
+        await websocket.close(code=1011, reason=f"Server error: {str(err)}")
+    finally:
+        logger.info(
+            "Websocket connect duration[%.2fs], %s.%d",
+            (datetime.now() - start_time).total_seconds(), camera_id, channel)
+        if cid:
+            await miot_audio_stream_manager.close_connection(
+                user_name=current_user, token_hash=token_hash,camera_id=camera_id, channel=channel, cid=cid)

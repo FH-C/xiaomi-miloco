@@ -172,6 +172,41 @@ class MiotProxy:
             raise
 
 
+    async def start_camera_audio_stream(self, camera_id: str, channel: int,
+                                      callback: Callable[[str, bytes, int, int, int], Coroutine]):
+        if camera_id not in self._camera_img_managers:
+            logger.warning("Camera %s not found in managers", camera_id)
+            return
+        instance = self._camera_img_managers[camera_id]
+        # Ensure audio is enabled
+        if not instance.miot_camera_instance._enable_audio:
+             await instance.miot_camera_instance.start_async(enable_audio=True, enable_reconnect=True)
+
+        await instance.register_raw_audio_stream(callback, channel)
+        logger.info("Successfully started camera audio stream, camera_id: %s, channel: %s", camera_id, channel)
+
+
+    async def stop_camera_audio_stream(self, camera_id: str, channel: int):
+        """
+        Stop camera audio stream
+
+        Args:
+            camera_id: Camera device ID
+            channel: Channel number, default is 0
+        """
+        if camera_id not in self._camera_img_managers:
+            logger.warning("Camera %s not found in managers", camera_id)
+            return
+
+        instance = self._camera_img_managers[camera_id]
+        try:
+            await instance.unregister_raw_audio_stream(channel)
+            logger.info("Successfully stopped camera audio stream, camera_id: %s, channel: %s", camera_id, channel)
+        except Exception as e: # pylint: disable=broad-exception-caught
+            logger.error("Failed to stop camera audio stream: %s", e)
+            raise
+
+
     async def _create_camera_img_manager(self, camera_info: MIoTCameraInfo) -> CameraVisionHandler | None:
         camera_instance = await self._get_camera_instance(camera_info)
         if camera_instance is not None:
