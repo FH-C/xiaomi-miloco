@@ -9,14 +9,15 @@ import { useTranslation } from 'react-i18next';
 import { isFirefox, sleep } from '@/utils/util';
 import DefaultCameraBg from '@/assets/images/default-camera-bg.png'
 
+import Icon from '@/components/Icon';
+import useAudioPlayer from '@/hooks/useAudioPlayer';
+
 /**
  * Detect video codec from binary data
- * 从二进制数据中检测视频编码格式
- *
- * @param {Uint8Array} data - Binary video data
- * @returns {string} Detected codec type ('h264', 'h265', or 'unknown')
+ * ... (keep existing detectCodec function)
  */
 const detectCodec = (data) => {
+  // ... (keep existing implementation)
   let i = 0;
   while (i < data.length - 6) {
     if (
@@ -26,8 +27,8 @@ const detectCodec = (data) => {
       const nalStart = data[i + 2] === 0x01 ? i + 3 : i + 4;
       const h264Type = data[nalStart] & 0x1f;
       const h265Type = (data[nalStart] >> 1) & 0x3f;
-      if ([5, 7, 8].includes(h264Type)) {return 'h264';}
-      if ([32, 33, 34, 19, 20].includes(h265Type)) {return 'h265';}
+      if ([5, 7, 8].includes(h264Type)) { return 'h264'; }
+      if ([32, 33, 34, 19, 20].includes(h265Type)) { return 'h265'; }
     }
     i++;
   }
@@ -44,10 +45,11 @@ const detectCodec = (data) => {
  * @param {Object} [props.style] - Custom style object
  * @param {string} props.cameraId - Camera device ID
  * @param {number} [props.channel=0] - Camera channel number
+ * @param {boolean} [props.enableAudio=false] - Whether to enable audio
  * @param {Function} [props.onCanvasRef] - Canvas ref callback function
  * @returns {JSX.Element} Video player component
  */
-const VideoPlayer = ({ codec = 'avc1.42E01E', poster, style, cameraId, channel, onCanvasRef, onPlay }) => {
+const VideoPlayer = ({ codec = 'avc1.42E01E', poster, style, cameraId, channel, enableAudio = false, onCanvasRef, onPlay }) => {
   const { t } = useTranslation();
   const canvasRef = useRef(null)
   const wsRef = useRef(null)
@@ -57,10 +59,19 @@ const VideoPlayer = ({ codec = 'avc1.42E01E', poster, style, cameraId, channel, 
   const [show, setShow] = useState(false)
   const [isSupported, setIsSupported] = useState(null)
   const [autoCodec, setAutoCodec] = useState(null);
+  const [isMuted, setIsMuted] = useState(true);
 
-  // detect WebCodecs support
+  // Audio Player Hook
+  useAudioPlayer({
+    cameraId,
+    channel,
+    enabled: enableAudio && !isMuted && show // Only play audio when enabled, not muted, and video is showing
+  });
+
+  // ... (keep existing useEffect for checkSupport)
   useEffect(() => {
     const checkSupport = () => {
+      // ... (keep existing implementation)
       console.log('Current environment:', {
         userAgent: navigator.userAgent,
         isSecureContext: window.isSecureContext,
@@ -99,13 +110,9 @@ const VideoPlayer = ({ codec = 'avc1.42E01E', poster, style, cameraId, channel, 
     checkSupport()
   }, [])
 
-  /**
-   * Check if the data is a key frame
-   * @param {Uint8Array} data - Binary video data
-   * @param {string} codec - Video codec format
-   * @returns {boolean} Whether the data is a key frame
-   */
+  // ... (keep existing isKeyFrame function)
   const isKeyFrame = (data, codec) => {
+    // ... (keep existing implementation)
     if (codec.startsWith('avc1') || codec.startsWith('h264')) {
       // H264
       let i = 0;
@@ -130,7 +137,7 @@ const VideoPlayer = ({ codec = 'avc1.42E01E', poster, style, cameraId, channel, 
         ) {
           const nalStart = data[i + 2] === 0x01 ? i + 3 : i + 4;
           const nalUnitType = (data[nalStart] >> 1) & 0x3f;
-          if ([16, 17, 18, 19, 20].includes(nalUnitType)) {return true;}
+          if ([16, 17, 18, 19, 20].includes(nalUnitType)) { return true; }
         }
         i++;
       }
@@ -148,7 +155,7 @@ const VideoPlayer = ({ codec = 'avc1.42E01E', poster, style, cameraId, channel, 
 
   useEffect(() => {
     const init = async () => {
-      if (!cameraId || isSupported === null) {return} // wait for support detection to complete
+      if (!cameraId || isSupported === null) { return } // wait for support detection to complete
 
       if (isFirefox()) {
         setError(t('instant.deviceList.browserNotSupport'))
@@ -310,10 +317,11 @@ const VideoPlayer = ({ codec = 'avc1.42E01E', poster, style, cameraId, channel, 
           position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', zIndex: 2,
           display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8
         }}>
-           <img
+          <img
             src={DefaultCameraBg}
             alt="default-camera-bg"
-            style={{ width: '100%',
+            style={{
+              width: '100%',
               height: '100%',
               objectFit: 'cover',
               borderRadius: 8,
@@ -336,6 +344,29 @@ const VideoPlayer = ({ codec = 'avc1.42E01E', poster, style, cameraId, channel, 
           opacity: show ? 1 : 0, transition: 'opacity 0.4s cubic-bezier(.4,0,.2,1)'
         }}
       />
+      {enableAudio && show && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '10px',
+            right: '10px',
+            zIndex: 10,
+            cursor: 'pointer',
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            borderRadius: '50%',
+            padding: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsMuted(!isMuted);
+          }}
+        >
+          <Icon name={isMuted ? 'mute' : 'sound'} size={20} color="#fff" />
+        </div>
+      )}
     </div>
   )
 }

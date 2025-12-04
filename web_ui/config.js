@@ -5,7 +5,7 @@
 
 export const config = {
   api: {
-    target: 'https://192.168.31.97:8000/',
+    target: 'https://127.0.0.1:8000/',  // Modify to your backend IP address and port
   },
   app: {
     name: 'Miloco',
