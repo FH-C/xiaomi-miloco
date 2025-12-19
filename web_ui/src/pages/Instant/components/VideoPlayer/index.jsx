@@ -11,6 +11,7 @@ import DefaultCameraBg from '@/assets/images/default-camera-bg.png'
 
 import Icon from '@/components/Icon';
 import useAudioPlayer from '@/hooks/useAudioPlayer';
+import RTSPPlayer from '@/components/RTSPPlayer';
 
 /**
  * Detect video codec from binary data
@@ -47,9 +48,15 @@ const detectCodec = (data) => {
  * @param {number} [props.channel=0] - Camera channel number
  * @param {boolean} [props.enableAudio=false] - Whether to enable audio
  * @param {Function} [props.onCanvasRef] - Canvas ref callback function
+ * @param {string} [props.cameraType] - Camera type ('miot' or 'rtsp')
+ * @param {string} [props.rtspUrl] - RTSP URL for RTSP cameras
  * @returns {JSX.Element} Video player component
  */
-const VideoPlayer = ({ codec = 'avc1.42E01E', poster, style, cameraId, channel, enableAudio = false, onCanvasRef, onPlay }) => {
+const VideoPlayer = ({ codec = 'avc1.42E01E', poster, style, cameraId, channel, enableAudio = false, onCanvasRef, onPlay, cameraType, rtspUrl }) => {
+  // If it's an RTSP camera, use RTSPPlayer component
+  if (cameraType === 'rtsp' && rtspUrl) {
+    return <RTSPPlayer rtspUrl={rtspUrl} style={style} />;
+  }
   const { t } = useTranslation();
   const canvasRef = useRef(null)
   const wsRef = useRef(null)

@@ -167,25 +167,31 @@ class MiotService:
 
     async def get_miot_camera_list(self) -> List[CameraInfo]:
         """
-        Get MiOT camera list
+        Get MiOT camera list (including RTSP cameras)
 
         Returns:
-            List[CameraInfo]: Camera information list
+            List[CameraInfo]: Camera information list (MIoT + RTSP)
 
         Raises:
             MiotServiceException: When getting camera list fails
         """
         try:
+            camera_list = []
+            
+            # Get MIoT cameras
             camera_dict: dict[
                 str,
                 MIoTCameraInfo] | None = await self._miot_proxy.get_cameras()
-            if not camera_dict:
-                raise MiotServiceException("Failed to get MiOT camera list")
-
-            camera_list = [
-                CameraInfo.model_validate(camera_info.model_dump())
-                for camera_info in camera_dict.values()
-            ]
+            if camera_dict:
+                camera_list.extend([
+                    CameraInfo.model_validate(camera_info.model_dump())
+                    for camera_info in camera_dict.values()
+                ])
+            
+            # Get RTSP cameras
+            for did, handler in self._miot_proxy._rtsp_camera_handlers.items():
+                rtsp_cam_seq = handler.get_recents_camera_img(0, 1)
+                camera_list.append(rtsp_cam_seq.camera_info)
 
             return camera_list
         except MiotServiceException:
@@ -225,10 +231,17 @@ class MiotService:
             ]
 
             camera_channels: list[CameraChannel] = []
+            # Add MIoT camera channels
             for camera_info in selected_camera_info:
                 for channel in range(camera_info.channel_count or 1):
                     camera_channels.append(
                         CameraChannel(did=camera_info.did, channel=channel))
+            
+            # Add RTSP camera channels
+            for camera_did in camera_dids:
+                if camera_did not in all_camera_info and camera_did in self._miot_proxy._rtsp_camera_handlers:
+                    camera_channels.append(CameraChannel(did=camera_did, channel=0))
+                    logger.info("Added RTSP camera %s to channel list", camera_did)
 
             camera_img_seqs = []
             for camera_channel in camera_channels:
@@ -242,6 +255,8 @@ class MiotService:
                     continue
 
                 camera_img_seqs.append(camera_img_seq)
+                logger.info("Added camera %s images: %d images", 
+                           camera_channel.did, len(camera_img_seq.img_list))
             return camera_img_seqs
         except Exception as e:
             logger.error("Failed to get MiOT camera images: %s", e)

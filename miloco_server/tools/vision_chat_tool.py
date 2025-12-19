@@ -102,10 +102,19 @@ class VisionChatTool(Actor):
                         [camera_img_seq.camera_info for camera_img_seq in camera_img_seqs],
                         [len(camera_img_seq.img_list) for camera_img_seq in camera_img_seqs])
 
+                # Log each camera before filtering
+                for cam_seq in camera_img_seqs:
+                    logger.info("[%s] Camera before filter: did=%s, online=%s, img_count=%d, camera_type=%s",
+                               self._request_id, cam_seq.camera_info.did, cam_seq.camera_info.online,
+                               len(cam_seq.img_list), getattr(cam_seq.camera_info, 'camera_type', 'unknown'))
+
                 camera_img_seqs = [
                     camera_img_seq for camera_img_seq in camera_img_seqs
                     if camera_img_seq.camera_info.online and len(camera_img_seq.img_list) > 0
                 ]
+                
+                logger.info("[%s] After filtering: %d cameras remain",
+                           self._request_id, len(camera_img_seqs))
 
             if len(camera_img_seqs) == 0:
                 self._future.set_result({"error": "No camera images found, please check cameras are working"})

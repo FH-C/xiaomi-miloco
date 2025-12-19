@@ -29,6 +29,9 @@ class CameraInfo(DeviceInfo):
     """Camera info"""
     channel_count: Optional[int] = Field(None, description="Camera channel count", ge=0)
     camera_status: Optional[str] = Field(None, description="Camera device status")
+    camera_type: Optional[str] = Field("miot", description="Camera type: 'miot' or 'rtsp'")
+    rtsp_url: Optional[str] = Field(None, description="RTSP URL for RTSP cameras")
+
 
 def choose_camera_list(camera_ids: list[str], camera_info_dict: dict[str, MIoTCameraInfo]) -> list[CameraInfo]:
     """Choose camera list"""

@@ -137,6 +137,8 @@ const DeviceItem = ({ item, onPlay, playing }) => {
             codec={'hev1.1.6.L93.B0'}
             poster={item.cover}
             onCanvasRef={handleCanvasRef}
+            cameraType={item.camera_type}
+            rtspUrl={item.rtsp_url}
             // onReady={handleVideoReady}
             // onError={handleVideoError}
             style={{ width: '100%', height: '154px' }}

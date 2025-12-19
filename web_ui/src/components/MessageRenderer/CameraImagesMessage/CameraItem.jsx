@@ -22,7 +22,7 @@ const CameraItem = ({ cameraData, autoOpen = false, last = false }) => {
   const { name, home_name, room_name, online } = camera_info || {};
   const [isExpanded, setIsExpanded] = useState(autoOpen);
 
-  if(!online){
+  if (!online) {
     return null;
   }
 
@@ -45,9 +45,24 @@ const CameraItem = ({ cameraData, autoOpen = false, last = false }) => {
             fontSize: '14px',
             color: 'var(--text-color)',
             fontWeight: '500',
-            marginBottom: '2px'
+            marginBottom: '2px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
           }}>
             {name}
+            {camera_info?.camera_type === 'rtsp' && (
+              <span style={{
+                fontSize: '10px',
+                padding: '2px 6px',
+                backgroundColor: 'var(--primary-color)',
+                color: '#fff',
+                borderRadius: '4px',
+                fontWeight: 'normal'
+              }}>
+                RTSP
+              </span>
+            )}
           </div>
           <div style={{
             fontSize: '12px',

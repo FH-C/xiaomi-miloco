@@ -15,10 +15,11 @@ from miot.client import MIoTClient
 from miot.types import MIoTOauthInfo, MIoTCameraInfo, MIoTDeviceInfo, MIoTManualSceneInfo, MIoTUserInfo
 from miot.camera import MIoTCameraInstance
 
-from miloco_server.config import MIOT_CACHE_DIR, CAMERA_CONFIG
+from miloco_server.config import MIOT_CACHE_DIR, CAMERA_CONFIG, RTSP_CAMERA_CONFIG
 from miloco_server.dao.kv_dao import AuthConfigKeys, KVDao, DeviceInfoKeys
 from miloco_server.schema.miot_schema import CameraImgSeq
 from miloco_server.utils.carmera_vision_handler import CameraVisionHandler
+from miloco_server.utils.rtsp_camera_handler import RTSPCameraHandler, RTSPCameraInfo
 
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,7 @@ class MiotProxy:
         self._kv_dao = kv_dao
         self.init_miot_info_dict()
         self._camera_img_managers: dict[str, CameraVisionHandler] = {}
+        self._rtsp_camera_handlers: dict[str, RTSPCameraHandler] = {}
         self._token_refresh_task: Optional[asyncio.Task] = None
 
         self._miot_client = MIoTClient(
@@ -51,6 +53,7 @@ class MiotProxy:
         # two times cache ttl, at least 1 second
         # frame_interval * cache_max_size / 1000 * 2 = seconds
         self._camera_img_cache_ttl: int = max(1, int(self._frame_interval * self._camera_img_cache_max_size / 1000 * 2))
+
         
     @property
     def miot_client(self) -> MIoTClient:
@@ -61,6 +64,7 @@ class MiotProxy:
                               cloud_server: Optional[str] = None) -> "MiotProxy":
         instance = cls(uuid, redirect_uri, kv_dao, cloud_server)
         await instance.init_miot_info()
+        await instance._init_rtsp_cameras()
         instance._token_refresh_task = asyncio.create_task(instance._start_token_refresh_task())
         logger.info("MiotProxy initialization successful, oauth_info: %s", instance._oauth_info)
         return instance
@@ -129,6 +133,11 @@ class MiotProxy:
 
 
     def get_recent_camera_img(self, camera_id: str, channel: int, recent_count: int) -> CameraImgSeq | None:
+        # Check RTSP cameras first
+        if camera_id in self._rtsp_camera_handlers:
+            return self._rtsp_camera_handlers[camera_id].get_recents_camera_img(channel, recent_count)
+        
+        # Then check MIoT cameras
         if camera_id not in self._camera_img_managers:
             logger.warning("Camera %s not found in managers", camera_id)
             return None
@@ -143,6 +152,14 @@ class MiotProxy:
 
     async def start_camera_raw_stream(self, camera_id: str, channel: int,
                                     callback: Callable[[str, bytes, int, int, int], Coroutine]):
+        # Check RTSP cameras first
+        if camera_id in self._rtsp_camera_handlers:
+            instance = self._rtsp_camera_handlers[camera_id]
+            await instance.register_raw_stream(callback, channel)
+            logger.info("Successfully started RTSP camera raw stream, camera_id: %s, channel: %s", camera_id, channel)
+            return
+        
+        # Then check MIoT cameras
         if camera_id not in self._camera_img_managers:
             logger.warning("Camera %s not found in managers", camera_id)
             return
@@ -159,6 +176,18 @@ class MiotProxy:
             camera_id: Camera device ID
             channel: Channel number, default is 0
         """
+        # Check RTSP cameras first
+        if camera_id in self._rtsp_camera_handlers:
+            instance = self._rtsp_camera_handlers[camera_id]
+            try:
+                await instance.unregister_raw_stream(channel)
+                logger.info("Successfully stopped RTSP camera raw video stream, camera_id: %s, channel: %s", camera_id, channel)
+            except Exception as e: # pylint: disable=broad-exception-caught
+                logger.error("Failed to stop RTSP camera raw video stream: %s", e)
+                raise
+            return
+        
+        # Then check MIoT cameras
         if camera_id not in self._camera_img_managers:
             logger.warning("Camera %s not found in managers", camera_id)
             return
@@ -174,6 +203,14 @@ class MiotProxy:
 
     async def start_camera_audio_stream(self, camera_id: str, channel: int,
                                       callback: Callable[[str, bytes, int, int, int], Coroutine]):
+        # Check RTSP cameras first
+        if camera_id in self._rtsp_camera_handlers:
+            instance = self._rtsp_camera_handlers[camera_id]
+            await instance.register_raw_audio_stream(callback, channel)
+            logger.info("Successfully started RTSP camera audio stream, camera_id: %s, channel: %s", camera_id, channel)
+            return
+        
+        # Then check MIoT cameras
         if camera_id not in self._camera_img_managers:
             logger.warning("Camera %s not found in managers", camera_id)
             return
@@ -194,6 +231,18 @@ class MiotProxy:
             camera_id: Camera device ID
             channel: Channel number, default is 0
         """
+        # Check RTSP cameras first
+        if camera_id in self._rtsp_camera_handlers:
+            instance = self._rtsp_camera_handlers[camera_id]
+            try:
+                await instance.unregister_raw_audio_stream(channel)
+                logger.info("Successfully stopped RTSP camera audio stream, camera_id: %s, channel: %s", camera_id, channel)
+            except Exception as e: # pylint: disable=broad-exception-caught
+                logger.error("Failed to stop RTSP camera audio stream: %s", e)
+                raise
+            return
+        
+        # Then check MIoT cameras
         if camera_id not in self._camera_img_managers:
             logger.warning("Camera %s not found in managers", camera_id)
             return
@@ -229,6 +278,46 @@ class MiotProxy:
         except Exception as e: # pylint: disable=broad-exception-caught
             logger.error("Failed to get camera instance: %s", e)
             return None
+
+    async def _init_rtsp_cameras(self) -> None:
+        """Initialize RTSP cameras from configuration"""
+        logger.info("Initializing RTSP cameras, config count: %d", len(RTSP_CAMERA_CONFIG))
+        
+        if not RTSP_CAMERA_CONFIG:
+            logger.info("No RTSP cameras configured")
+            return
+            
+        try:
+            for idx, camera_config in enumerate(RTSP_CAMERA_CONFIG):
+                try:
+                    logger.info("Initializing RTSP camera %d/%d: %s", 
+                               idx + 1, len(RTSP_CAMERA_CONFIG), camera_config.get('did', 'unknown'))
+                    
+                    rtsp_info = RTSPCameraInfo(**camera_config)
+                    logger.info("Created RTSPCameraInfo for %s, URL: %s", rtsp_info.did, rtsp_info.rtsp_url)
+                    
+                    handler = RTSPCameraHandler(
+                        camera_info=rtsp_info,
+                        max_size=self._camera_img_cache_max_size,
+                        ttl=self._camera_img_cache_ttl,
+                        frame_interval=self._frame_interval
+                    )
+                    logger.info("Created RTSPCameraHandler for %s", rtsp_info.did)
+                    
+                    success = await handler.start_async()
+                    if success:
+                        self._rtsp_camera_handlers[rtsp_info.did] = handler
+                        logger.info("Successfully initialized RTSP camera: %s", rtsp_info.did)
+                    else:
+                        logger.error("Failed to start RTSP camera handler: %s", rtsp_info.did)
+                        
+                except Exception as e:  # pylint: disable=broad-exception-caught
+                    logger.error("Failed to initialize RTSP camera %s: %s", 
+                               camera_config.get('did', 'unknown'), e, exc_info=True)
+                    
+            logger.info("RTSP camera initialization complete. Total cameras: %d", len(self._rtsp_camera_handlers))
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error("Failed to initialize RTSP cameras: %s", e, exc_info=True)
 
 
     async def get_cameras(self) -> dict[str, MIoTCameraInfo]:

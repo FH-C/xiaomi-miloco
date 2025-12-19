@@ -58,6 +58,19 @@ trigger_rule_runner:
 camera:
   frame_interval: 500 # Unit: Millisecond (ms)
 
+# RTSP camera configuration
+# Configure RTSP cameras streaming through go2rtc
+go2rtc_url: "http://127.0.0.1:1984"  # go2rtc server URL for WebRTC streaming
+rtsp_cameras:
+  # Example RTSP camera configuration. Remove or duplicate entries as needed.
+  - did: "ip_camera_1"
+    name: "ip_camera_1"
+    rtsp_url: "rtsp://127.0.0.1:8554/mac_cam"
+    enable_audio: true
+    transport: "tcp"  # tcp/udp
+    home_name: "家"
+    room_name: "客厅"
+
 
 # MIoT configuration, default to 'cn', use your MiHome cloud server
   # 'cn': '中国大陆'
@@ -68,3 +81,4 @@ camera:
   # 'us': 'United States
 miot:
   cloud_server: "cn"
+
