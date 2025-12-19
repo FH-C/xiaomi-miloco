@@ -119,6 +119,12 @@ class TriggerRuleRunner:
             camera_id: CameraInfo.model_validate(miot_camera_info.model_dump())
             for camera_id, miot_camera_info in miot_camera_info_dict.items()
         }
+        
+        # Add RTSP cameras to camera_info_dict
+        rtsp_camera_list = await self.miot_proxy.get_rtsp_camera_list()
+        for rtsp_camera in rtsp_camera_list:
+            camera_info_dict[rtsp_camera.did] = rtsp_camera
+        
         camera_motion_dict: dict[str,
                                  dict[int,
                                       tuple[bool,

@@ -17,7 +17,7 @@ from miot.camera import MIoTCameraInstance
 
 from miloco_server.config import MIOT_CACHE_DIR, CAMERA_CONFIG, RTSP_CAMERA_CONFIG
 from miloco_server.dao.kv_dao import AuthConfigKeys, KVDao, DeviceInfoKeys
-from miloco_server.schema.miot_schema import CameraImgSeq
+from miloco_server.schema.miot_schema import CameraImgSeq, CameraInfo
 from miloco_server.utils.carmera_vision_handler import CameraVisionHandler
 from miloco_server.utils.rtsp_camera_handler import RTSPCameraHandler, RTSPCameraInfo
 
@@ -342,8 +342,38 @@ class MiotProxy:
             return []
 
         camera_dids = list(camera_dict.keys())
-        logger.debug("Retrieved %d camera device IDs", len(camera_dids))
+        
+        # Add RTSP camera DIDs
+        rtsp_dids = list(self._rtsp_camera_handlers.keys())
+        camera_dids.extend(rtsp_dids)
+        
+        logger.debug("Retrieved %d camera device IDs (MIoT: %d, RTSP: %d)", 
+                    len(camera_dids), len(camera_dict.keys()), len(rtsp_dids))
         return camera_dids
+    
+    async def get_rtsp_camera_list(self) -> list[CameraInfo]:
+        """
+        Get all RTSP camera info as CameraInfo objects
+        
+        Returns:
+            list[CameraInfo]: List of RTSP camera info
+        """
+        rtsp_camera_list = []
+        for camera_id, handler in self._rtsp_camera_handlers.items():
+            camera_info = CameraInfo(
+                did=handler.camera_info.did,
+                name=handler.camera_info.name,
+                online=True,
+                location=handler.camera_info.location,
+                area=handler.camera_info.area,
+                channel_count=1,
+                camera_type="rtsp",
+                rtsp_url=handler.camera_info.rtsp_url
+            )
+            rtsp_camera_list.append(camera_info)
+        
+        logger.debug("Retrieved %d RTSP cameras", len(rtsp_camera_list))
+        return rtsp_camera_list
 
     async def get_devices(self) -> dict[str, MIoTDeviceInfo]:
         if not self._device_info_dict:

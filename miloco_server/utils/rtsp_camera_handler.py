@@ -28,6 +28,8 @@ class RTSPCameraInfo(BaseModel):
     rtsp_url: str = Field(..., description="RTSP stream URL from go2rtc")
     enable_audio: bool = Field(default=False, description="Whether to enable audio stream")
     transport: str = Field(default="tcp", description="Transport protocol: tcp or udp")
+    location: Optional[str] = Field(default=None, description="Camera location (e.g. Home)")
+    area: Optional[str] = Field(default=None, description="Camera area (e.g. Living Room)")
     home_name: str = Field(default="", description="Home location name")
     room_name: str = Field(default="", description="Room name")
 
