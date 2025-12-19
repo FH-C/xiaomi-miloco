@@ -158,6 +158,17 @@ const RuleRecord = () => {
     },
     { title: t('logManage.ruleName'), dataIndex: 'rule', key: 'rule', width: 120 },
     {
+      title: t('logManage.aiResult'),
+      dataIndex: 'aiResponse',
+      key: 'aiResponse',
+      width: 200,
+      render: (text) => (
+        <div style={{ maxHeight: 100, overflowY: 'auto', whiteSpace: 'pre-wrap' }}>
+          {text || '-'}
+        </div>
+      )
+    },
+    {
       title: t('logManage.executionEffect'),
       dataIndex: 'result',
       key: 'result',

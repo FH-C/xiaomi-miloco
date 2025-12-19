@@ -39,7 +39,7 @@ export default {
       deviceDecodeFailed: '视频解码失败',
       browserNotSupport: '当前浏览器不支持摄像头播放，请使用Chrome、Edge等浏览器尝试',
     },
-    chat:{
+    chat: {
       removeCamera: '移除摄像头',
       sendMessageFailed: '发送消息失败，请重试',
       aiGenerated: '内容由 AI 生成，请谨慎甄别',
@@ -368,6 +368,7 @@ export default {
     recentTriggeredRules: '最近触发规则',
 
     noRuleRecord: '暂无规则记录',
+    aiResult: 'AI 返回结果',
 
     imagesPackaged: '图片打包下载完成',
     imagesPackagedFailed: '图片打包下载失败',

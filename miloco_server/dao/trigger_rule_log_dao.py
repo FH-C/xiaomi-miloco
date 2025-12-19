@@ -38,12 +38,28 @@ class TriggerRuleLogDAO:
 
         # Parse execute_result
         execute_result = None
+        ai_response = None
         if data.get("execute_result"):
             execute_result_data = json.loads(data["execute_result"])
             execute_result = ExecuteResult(**execute_result_data)
 
             # Reduce the data sent to the UI, and obtain the dynamic execution results separately
             if execute_result.ai_recommend_dynamic_execute_result:
+                session = execute_result.ai_recommend_dynamic_execute_result.chat_history_session
+                if session and session.data:
+                    ai_responses = []
+                    for item in session.data:
+                        if (item.header.type == "instruction" and 
+                            item.header.namespace == "Template" and 
+                            item.header.name == "ToastStream"):
+                            try:
+                                payload = json.loads(item.payload)
+                                ai_responses.append(payload.get("stream", ""))
+                            except (ValueError, TypeError):
+                                pass
+                    if ai_responses:
+                        ai_response = "".join(ai_responses)
+
                 # pylint: disable=assigning-non-slot
                 execute_result.ai_recommend_dynamic_execute_result.chat_history_session = None
 
@@ -54,7 +70,8 @@ class TriggerRuleLogDAO:
             trigger_rule_name=data["trigger_rule_name"],
             trigger_rule_condition=data["trigger_rule_condition"],
             condition_results=camera_condition_results,
-            execute_result=execute_result
+            execute_result=execute_result,
+            ai_response=ai_response
         )
 
 

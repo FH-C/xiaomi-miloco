@@ -63,3 +63,4 @@ class TriggerRuleLog(BaseModel):
         ..., description="Trigger condition result list"
     )
     execute_result: Optional[ExecuteResult] = Field(None, description="Trigger rule execute result")
+    ai_response: Optional[str] = Field(None, description="AI execution return result")

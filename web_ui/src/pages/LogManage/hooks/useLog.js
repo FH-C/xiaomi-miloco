@@ -43,7 +43,8 @@ const useLog = () => {
         trigger_rule_name,
         trigger_rule_condition,
         condition_results = [],
-        execute_result = null
+        execute_result = null,
+        ai_response = ''
       } = item;
 
       const safeExecuteResult = execute_result || {};
@@ -142,6 +143,7 @@ const useLog = () => {
         isDynamic,
         dynamicExecuteResult,
         aiRecommendActionDescriptions,
+        aiResponse: ai_response,
         rawData: item
       });
     });
